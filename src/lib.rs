@@ -15,14 +15,20 @@ use discord::Connection;
 
 use claimed_spawns::ClaimedSpawns;
 use std::thread;
+use std::sync::{Arc, RwLock};
+use std::sync::mpsc::channel;
+use std::sync::mpsc::Sender;
 
-fn event_loop(discord: Discord, mut connection: Connection, mut state: State) -> Result<()> {
+fn event_loop(discord: Discord, mut connection: Connection, shared_state: Arc<RwLock<State>>, sender: Sender<Command>) -> Result<()> {
     let mut spawns = ClaimedSpawns::new();
 
     loop {
         if let Ok(event) = connection.recv_event() {
-            state.update(&event);
-
+            {
+                let mut state = shared_state.write().unwrap();
+                state.update(&event);
+            }
+            
             match event {
                 Event::MessageCreate(message) => {
                     let command = Command::from(message.content.clone());
@@ -79,12 +85,15 @@ fn initialize_discord(bot_key: &str) -> Result<(Discord, Connection, State)> {
 
 pub fn run(bot_key: &str) -> Result<()> {
     let (discord, connection, state) = initialize_discord(bot_key)?;
+    
+    let shared_state = Arc::new(RwLock::new(state));
+    let (sender, receiver) = channel();
 
-    let handle = thread::spawn(move || {
-        event_loop(discord, connection, state)
+    let loop_thread = thread::spawn(move || {
+        event_loop(discord, connection, shared_state.clone(), sender.clone())
     });
 
-    handle.join().unwrap()
+    loop_thread.join().unwrap()
 }
 
 #[cfg(test)]
