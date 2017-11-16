@@ -11,20 +11,13 @@ use discord::Discord;
 use discord::State;
 use discord::model::Event;
 use command::Command;
+use discord::Connection;
+
 
 use claimed_spawns::ClaimedSpawns;
 
-pub fn run(bot_key: &str) -> Result<()> {
+fn event_loop(discord: Discord, mut connection: Connection, mut state: State) -> Result<()> {
     let mut spawns = ClaimedSpawns::new();
-
-    let discord =
-        Discord::from_bot_token(bot_key).chain_err(|| "Failed to initialize discord client.")?;
-
-    let (mut connection, ready_state) = discord
-        .connect()
-        .chain_err(|| "Failed to initialize connection.")?;
-
-    let mut state = State::new(ready_state);
 
     loop {
         if let Ok(event) = connection.recv_event() {
@@ -66,9 +59,22 @@ pub fn run(bot_key: &str) -> Result<()> {
                 _ => {}
             }
         } else {
-            eprintln!("failed to receive an event.");
+            eprintln!("Failed to receive an event.");
         }
     }
+}
+
+pub fn run(bot_key: &str) -> Result<()> {
+    let discord =
+        Discord::from_bot_token(bot_key).chain_err(|| "Failed to initialize Discord client.")?;
+
+    let (connection, ready_state) = discord
+        .connect()
+        .chain_err(|| "Failed to initialize connection.")?;
+
+    let state = State::new(ready_state);
+
+    event_loop(discord, connection, state)
 }
 
 #[cfg(test)]
