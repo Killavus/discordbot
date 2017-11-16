@@ -12,14 +12,12 @@ impl From<String> for Command {
 
     if cleaned_content.starts_with("/claimedlist") {
       Command::ClaimedList
-    }
-    else if cleaned_content.starts_with("/claim") {
+    } else if cleaned_content.starts_with("/claim") {
       let spawn_name = cleaned_content["/claim".len()..].trim();
       Command::ClaimSpawn {
         spawn_name: String::from(spawn_name),
       }
-    }
-    else {
+    } else {
       Command::Unknown
     }
   }

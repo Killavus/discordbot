@@ -6,60 +6,34 @@ mod errors;
 mod command;
 mod claimed_spawns;
 
-use errors::*;
-use discord::Discord;
-use discord::State;
-use discord::model::Event;
-use command::Command;
-use discord::Connection;
-
-use claimed_spawns::ClaimedSpawns;
 use std::thread;
 use std::sync::{Arc, RwLock};
-use std::sync::mpsc::channel;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{channel, Sender};
+use discord::{Connection, Discord, State};
+use discord::model::{Event, Message};
 
-fn event_loop(discord: Discord, mut connection: Connection, shared_state: Arc<RwLock<State>>, sender: Sender<Command>) -> Result<()> {
-    let mut spawns = ClaimedSpawns::new();
+use errors::*;
+use command::Command;
+use claimed_spawns::ClaimedSpawns;
 
+fn event_loop(
+    mut connection: Connection,
+    shared_state: Arc<RwLock<State>>,
+    sender: Sender<(Message, Command)>,
+) -> Result<()> {
     loop {
         if let Ok(event) = connection.recv_event() {
             {
                 let mut state = shared_state.write().unwrap();
                 state.update(&event);
             }
-            
+
             match event {
                 Event::MessageCreate(message) => {
                     let command = Command::from(message.content.clone());
                     match command {
-                        Command::ClaimSpawn { spawn_name } => {                            
-                            discord.send_message(
-                                message.channel_id,
-                                &format!("Spawn claimed: {}", spawn_name),
-                                "",
-                                false
-                            ).chain_err(|| "Failed to send message")?;
-                            spawns.claim(spawn_name, message.author);
-                        },
-                        Command::ClaimedList => {
-                            let mut content = String::from("Claimed spawns:\n");
-                            spawns.iter().for_each(
-                                |spawn| {
-                                    content.push_str(
-                                        &format!("> {} by **{}**\n", spawn.spawn_name, spawn.claimed_by.name)
-                                    )
-                                }
-                            );
-
-                            discord.send_message(
-                                message.channel_id,
-                                &content,
-                                "",
-                                false
-                            ).chain_err(|| "Failed to send message")?;
-                        },
-                        _ => {}
+                        Command::Unknown => (),
+                        _ => sender.send((message, command)).unwrap(),
                     }
                 }
                 _ => {}
@@ -84,16 +58,48 @@ fn initialize_discord(bot_key: &str) -> Result<(Discord, Connection, State)> {
 }
 
 pub fn run(bot_key: &str) -> Result<()> {
+    let mut spawns = ClaimedSpawns::new();
     let (discord, connection, state) = initialize_discord(bot_key)?;
-    
+
     let shared_state = Arc::new(RwLock::new(state));
     let (sender, receiver) = channel();
 
-    let loop_thread = thread::spawn(move || {
-        event_loop(discord, connection, shared_state.clone(), sender.clone())
+    thread::spawn(move || {
+        event_loop(connection, shared_state.clone(), sender.clone())
     });
 
-    loop_thread.join().unwrap()
+    loop {
+        let (message, command) = receiver.recv().unwrap();
+
+        match command {
+            Command::ClaimSpawn { spawn_name } => {
+                discord
+                    .send_message(
+                        message.channel_id,
+                        &format!("Spawn claimed: {}", spawn_name),
+                        "",
+                        false,
+                    )
+                    .chain_err(|| "Failed to send message")?;
+                spawns.claim(spawn_name, message.author);
+            }
+            Command::ClaimedList => {
+                let mut content = String::from("Claimed spawns:\n");
+                spawns.iter().for_each(|spawn| {
+                    content.push_str(&format!(
+                        "> {} by **{}**\n",
+                        spawn.spawn_name,
+                        spawn.claimed_by.name
+                    ))
+                });
+
+                discord
+                    .send_message(message.channel_id, &content, "", false)
+                    .chain_err(|| "Failed to send message")?;
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
