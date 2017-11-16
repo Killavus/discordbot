@@ -14,6 +14,7 @@ use command::Command;
 use discord::Connection;
 
 use claimed_spawns::ClaimedSpawns;
+use std::thread;
 
 fn event_loop(discord: Discord, mut connection: Connection, mut state: State) -> Result<()> {
     let mut spawns = ClaimedSpawns::new();
@@ -78,7 +79,12 @@ fn initialize_discord(bot_key: &str) -> Result<(Discord, Connection, State)> {
 
 pub fn run(bot_key: &str) -> Result<()> {
     let (discord, connection, state) = initialize_discord(bot_key)?;
-    event_loop(discord, connection, state)
+
+    let handle = thread::spawn(move || {
+        event_loop(discord, connection, state)
+    });
+
+    handle.join().unwrap()
 }
 
 #[cfg(test)]
