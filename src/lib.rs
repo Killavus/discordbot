@@ -28,6 +28,8 @@ fn event_loop(
                 state.update(&event);
             }
 
+            println!("{:?}", event);
+
             match event {
                 Event::MessageCreate(message) => {
                     let command = Command::from(message.content.clone());
@@ -62,6 +64,8 @@ pub fn run(bot_key: &str) -> Result<()> {
     let (discord, connection, state) = initialize_discord(bot_key)?;
 
     let shared_state = Arc::new(RwLock::new(state));
+    let shared_discord = Arc::new(discord);
+
     let (sender, receiver) = channel();
 
     thread::spawn(move || {
@@ -73,7 +77,7 @@ pub fn run(bot_key: &str) -> Result<()> {
 
         match command {
             Command::ClaimSpawn { spawn_name } => {
-                discord
+                shared_discord
                     .send_message(
                         message.channel_id,
                         &format!("Spawn claimed: {}", spawn_name),
@@ -93,7 +97,7 @@ pub fn run(bot_key: &str) -> Result<()> {
                     ))
                 });
 
-                discord
+                shared_discord
                     .send_message(message.channel_id, &content, "", false)
                     .chain_err(|| "Failed to send message")?;
             }

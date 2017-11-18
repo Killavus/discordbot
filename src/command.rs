@@ -1,8 +1,10 @@
 use std::convert::From;
+use discord::model::Server;
 
 pub enum Command {
   ClaimSpawn { spawn_name: String },
   ClaimedList,
+  EstablishState { server: Server },
   Unknown,
 }
 
