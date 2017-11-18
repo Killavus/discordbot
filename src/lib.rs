@@ -10,7 +10,6 @@ use std::thread;
 use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{channel, Sender};
 use discord::{Connection, Discord, State};
-use discord::model::{Event, Message};
 
 use errors::*;
 use command::Command;
@@ -19,7 +18,7 @@ use claimed_spawns::ClaimedSpawns;
 fn event_loop(
     mut connection: Connection,
     shared_state: Arc<RwLock<State>>,
-    sender: Sender<(Message, Command)>,
+    sender: Sender<Command>,
 ) -> Result<()> {
     loop {
         if let Ok(event) = connection.recv_event() {
@@ -28,17 +27,10 @@ fn event_loop(
                 state.update(&event);
             }
 
-            println!("{:?}", event);
-
-            match event {
-                Event::MessageCreate(message) => {
-                    let command = Command::from(message.content.clone());
-                    match command {
-                        Command::Unknown => (),
-                        _ => sender.send((message, command)).unwrap(),
-                    }
-                }
-                _ => {}
+            let command = Command::from(event);
+            match command {
+                Command::Unknown => (),
+                _ => sender.send(command).unwrap(),
             }
         } else {
             eprintln!("Failed to receive an event.");
@@ -73,10 +65,10 @@ pub fn run(bot_key: &str) -> Result<()> {
     });
 
     loop {
-        let (message, command) = receiver.recv().unwrap();
+        let command = receiver.recv().unwrap();
 
         match command {
-            Command::ClaimSpawn { spawn_name } => {
+            Command::ClaimSpawn { spawn_name, message } => {
                 shared_discord
                     .send_message(
                         message.channel_id,
@@ -85,9 +77,9 @@ pub fn run(bot_key: &str) -> Result<()> {
                         false,
                     )
                     .chain_err(|| "Failed to send message")?;
-                spawns.claim(spawn_name, message.author);
+                spawns.claim(String::from(spawn_name), message.author);
             }
-            Command::ClaimedList => {
+            Command::ClaimedList { message } => {
                 let mut content = String::from("Claimed spawns:\n");
                 spawns.iter().for_each(|spawn| {
                     content.push_str(&format!(
