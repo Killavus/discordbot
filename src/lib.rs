@@ -6,17 +6,17 @@ mod errors;
 mod command;
 mod claimed_spawns;
 mod server_state;
+mod discord_utils;
 
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{channel, Sender};
 use discord::{Connection, Discord, State};
-use discord::model::ChannelId;
 
 use errors::*;
 use command::Command;
 use claimed_spawns::ClaimedSpawns;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 fn event_loop(
     mut connection: Connection,
@@ -56,7 +56,7 @@ fn initialize_discord(bot_key: &str) -> Result<(Discord, Connection, State)> {
 
 pub fn run(bot_key: &str) -> Result<()> {
     let mut spawns = ClaimedSpawns::new();
-    let mut channel_set: HashSet<ChannelId> = HashSet::new();
+    let mut channel_pairs = HashMap::new();
 
     let (discord, connection, state) = initialize_discord(bot_key)?;
 
@@ -77,7 +77,7 @@ pub fn run(bot_key: &str) -> Result<()> {
                 spawn_name,
                 message,
             } => {
-                if !channel_set.contains(&message.channel_id) {
+                if !channel_pairs.contains_key(&message.channel_id) {
                     continue;
                 }
 
@@ -92,7 +92,7 @@ pub fn run(bot_key: &str) -> Result<()> {
                 spawns.claim(spawn_name, message.author);
             }
             Command::ClaimedList { message } => {
-                if !channel_set.contains(&message.channel_id) {
+                if !channel_pairs.contains_key(&message.channel_id) {
                     continue;
                 }
 
@@ -110,10 +110,13 @@ pub fn run(bot_key: &str) -> Result<()> {
                     .chain_err(|| "Failed to send message")?;
             }
             Command::EstablishState { server_id } => {
-                let bot_channel =
+                let bot_channels =
                     server_state::prepare_bot_channel(shared_discord.clone(), server_id)?;
 
-                channel_set.insert(bot_channel.id);
+                channel_pairs.insert(
+                    bot_channels.interaction_channel_id(),
+                    bot_channels.info_channel_id(),
+                );
             }
             _ => {}
         }
