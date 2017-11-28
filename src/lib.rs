@@ -16,7 +16,7 @@ use discord::{Connection, Discord, State};
 
 use errors::*;
 use command::Command;
-use claimed_spawns::ClaimedSpawns;
+use claimed_spawns::{claimed_spawn_embed, ClaimedSpawns};
 use std::collections::HashMap;
 
 fn event_loop(
@@ -83,16 +83,13 @@ pub fn run(bot_key: &str) -> Result<()> {
                 }
 
                 let info_channel_id = channel_pairs.get(&message.channel_id).unwrap();
+                let spawn = spawns.claim(spawn_name, message);
 
                 shared_discord
-                    .send_message(
-                        *info_channel_id,
-                        &format!("Spawn claimed: {}", spawn_name),
-                        "",
-                        false,
-                    )
+                    .send_embed(*info_channel_id, "", |builder| {
+                        claimed_spawn_embed(spawn, builder)
+                    })
                     .chain_err(|| "Failed to send message")?;
-                spawns.claim(spawn_name, message);
             }
             Command::ClaimedList { message } => {
                 if !channel_pairs.contains_key(&message.channel_id) {
