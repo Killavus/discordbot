@@ -60,6 +60,6 @@ pub fn claimed_spawn_embed(claimed_spawn: &ClaimedSpawn, builder: EmbedBuilder) 
           &format!("<@{}>", claimed_spawn.user().id),
           true,
         )
-        .field("Last update", "N/A", true)
+        .field("Last update", &format!("{}", claimed_spawn.claimed_at().format("%e %B, %H:%M")), true)
     })
 }
