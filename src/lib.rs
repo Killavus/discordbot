@@ -81,9 +81,11 @@ pub fn run(bot_key: &str) -> Result<()> {
                     continue;
                 }
 
+                let info_channel_id = channel_pairs.get(&message.channel_id).unwrap();
+
                 shared_discord
                     .send_message(
-                        message.channel_id,
+                        info_channel_id,
                         &format!("Spawn claimed: {}", spawn_name),
                         "",
                         false,
