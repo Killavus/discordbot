@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate discord;
 #[macro_use]
 extern crate error_chain;
@@ -85,13 +86,13 @@ pub fn run(bot_key: &str) -> Result<()> {
 
                 shared_discord
                     .send_message(
-                        info_channel_id,
+                        *info_channel_id,
                         &format!("Spawn claimed: {}", spawn_name),
                         "",
                         false,
                     )
                     .chain_err(|| "Failed to send message")?;
-                spawns.claim(spawn_name, message.author);
+                spawns.claim(spawn_name, message);
             }
             Command::ClaimedList { message } => {
                 if !channel_pairs.contains_key(&message.channel_id) {
@@ -103,7 +104,7 @@ pub fn run(bot_key: &str) -> Result<()> {
                     content.push_str(&format!(
                         "> {} by **{}**\n",
                         spawn.spawn_name,
-                        spawn.claimed_by.name
+                        spawn.user().name
                     ))
                 });
 
