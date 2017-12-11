@@ -9,7 +9,7 @@ extern crate serde_derive;
 
 mod errors;
 mod command;
-mod claimed_spawns;
+mod spawns;
 mod server_state;
 mod discord_utils;
 
@@ -20,7 +20,7 @@ use discord::{Connection, Discord, State};
 
 use errors::*;
 use command::Command;
-use claimed_spawns::{claimed_spawn_embed, ClaimList, SpawnList};
+use spawns::{claimed_spawn_embed, ClaimList, SpawnList};
 use std::collections::HashMap;
 
 fn event_loop(
