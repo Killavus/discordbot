@@ -8,3 +8,6 @@ discord = { git = "https://github.com/SpaceManiac/discord-rs.git" }
 error-chain = "0.11.0"
 dotenv = "0.10.1"
 chrono = "0.4.0"
+serde = "1.0.21"
+serde_derive = "1.0.21"
+csv = "1.0.0-beta.5"

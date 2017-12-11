@@ -1,7 +1,11 @@
 extern crate chrono;
+extern crate csv;
 extern crate discord;
 #[macro_use]
 extern crate error_chain;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 
 mod errors;
 mod command;
@@ -16,7 +20,7 @@ use discord::{Connection, Discord, State};
 
 use errors::*;
 use command::Command;
-use claimed_spawns::{claimed_spawn_embed, ClaimedSpawns};
+use claimed_spawns::{claimed_spawn_embed, ClaimList, SpawnList};
 use std::collections::HashMap;
 
 fn event_loop(
@@ -56,11 +60,12 @@ fn initialize_discord(bot_key: &str) -> Result<(Discord, Connection, State)> {
 }
 
 pub fn run(bot_key: &str) -> Result<()> {
-    let mut spawns = ClaimedSpawns::new();
+    let spawns = SpawnList::from_csv("./spawns.csv")?;
+    let mut spawn_claims = ClaimList::new();
+
     let mut channel_pairs = HashMap::new();
 
     let (discord, connection, state) = initialize_discord(bot_key)?;
-
     let shared_state = Arc::new(RwLock::new(state));
     let shared_discord = Arc::new(discord);
 
@@ -74,40 +79,31 @@ pub fn run(bot_key: &str) -> Result<()> {
         let command = receiver.recv().unwrap();
 
         match command {
-            Command::ClaimSpawn {
-                spawn_name,
-                message,
-            } => {
+            Command::ClaimSpawn { spawn_msg, message } => {
                 if !channel_pairs.contains_key(&message.channel_id) {
                     continue;
                 }
 
+                let interaction_channel_id = message.channel_id.clone();
                 let info_channel_id = channel_pairs.get(&message.channel_id).unwrap();
-                let spawn = spawns.claim(spawn_name, message);
+                let maybe_claimed_spawn = spawn_claims.claim(&spawns, &spawn_msg, message);
 
-                shared_discord
-                    .send_embed(*info_channel_id, "", |builder| {
-                        claimed_spawn_embed(spawn, builder)
-                    })
-                    .chain_err(|| "Failed to send message")?;
-            }
-            Command::ClaimedList { message } => {
-                if !channel_pairs.contains_key(&message.channel_id) {
-                    continue;
+                if let Some(claimed_spawn) = maybe_claimed_spawn {
+                    shared_discord
+                        .send_embed(*info_channel_id, "", |builder| {
+                            claimed_spawn_embed(claimed_spawn, builder)
+                        })
+                        .chain_err(|| "Failed to send message")?;
+                } else {
+                    shared_discord
+                        .send_message(
+                            interaction_channel_id,
+                            "Sorry, but I could not find the spawn you wanted to claim.",
+                            "",
+                            false,
+                        )
+                        .chain_err(|| "Failed to send message")?;
                 }
-
-                let mut content = String::from("Claimed spawns:\n");
-                spawns.iter().for_each(|spawn| {
-                    content.push_str(&format!(
-                        "> {} by **{}**\n",
-                        spawn.spawn_name,
-                        spawn.user().name
-                    ))
-                });
-
-                shared_discord
-                    .send_message(message.channel_id, &content, "", false)
-                    .chain_err(|| "Failed to send message")?;
             }
             Command::EstablishState { server_id } => {
                 let bot_channels =
