@@ -17,6 +17,7 @@ use std::thread;
 use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{channel, Sender};
 use discord::{Connection, Discord, State};
+use discord::model::ReactionEmoji;
 
 use errors::*;
 use command::Command;
@@ -89,6 +90,13 @@ pub fn run(bot_key: &str) -> Result<()> {
                     ClaimResult::NewClaim(spawn) => {
                         let claimed_spawn = spawn_claims.claim_by_code(&spawn.code).unwrap();
 
+                        shared_discord
+                            .add_reaction(
+                                interaction_channel_id,
+                                message.id,
+                                ReactionEmoji::Unicode(String::from("👌")),
+                            )
+                            .chain_err(|| "Failed to add reaction.")?;
                         shared_discord
                             .send_embed(*info_channel_id, "", |builder| {
                                 claimed_spawn_embed(claimed_spawn, builder)
