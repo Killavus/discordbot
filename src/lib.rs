@@ -20,7 +20,7 @@ use discord::{Connection, Discord, State};
 
 use errors::*;
 use command::Command;
-use spawns::{claimed_spawn_embed, ClaimList, SpawnList};
+use spawns::{claimed_spawn_embed, ClaimList, ClaimResult, SpawnList};
 use std::collections::HashMap;
 
 fn event_loop(
@@ -86,23 +86,32 @@ pub fn run(bot_key: &str) -> Result<()> {
 
                 let interaction_channel_id = message.channel_id.clone();
                 let info_channel_id = channel_pairs.get(&message.channel_id).unwrap();
-                let maybe_claimed_spawn = spawn_claims.claim(&spawns, &spawn_msg, message);
 
-                if let Some(claimed_spawn) = maybe_claimed_spawn {
-                    shared_discord
-                        .send_embed(*info_channel_id, "", |builder| {
-                            claimed_spawn_embed(claimed_spawn, builder)
-                        })
-                        .chain_err(|| "Failed to send message")?;
-                } else {
-                    shared_discord
-                        .send_message(
-                            interaction_channel_id,
-                            "Sorry, but I could not find the spawn you wanted to claim.",
-                            "",
-                            false,
-                        )
-                        .chain_err(|| "Failed to send message")?;
+                match spawn_claims.claim(&spawns, &spawn_msg, message) {
+                    ClaimResult::NewClaim(spawn) => {
+                        let claimed_spawn = spawn_claims.claim_by_code(&spawn.code).unwrap();
+
+                        shared_discord
+                            .send_embed(*info_channel_id, "", |builder| {
+                                claimed_spawn_embed(claimed_spawn, builder)
+                            })
+                            .chain_err(|| "Failed to send message")?;
+                    }
+                    ClaimResult::UnknownSpawn => {                        
+                        shared_discord
+                            .send_message(
+                                interaction_channel_id,
+                                "Sorry, but I could not find the spawn you wanted to claim.",
+                                "",
+                                false,
+                            )
+                            .chain_err(|| "Failed to send message")?;
+                    }
+                    ClaimResult::ClaimedBefore(spawn) => {
+                        let claimed_spawn = spawn_claims.claim_by_code(&spawn.code).unwrap();
+
+                        shared_discord.send_message(interaction_channel_id, &format!("Sorry, but <@{}> claimed this spawn already. Maybe you should message him?", claimed_spawn.user().id), "", false).chain_err(|| "Failed to send message")?;
+                    }
                 }
             }
             Command::EstablishState { server_id } => {

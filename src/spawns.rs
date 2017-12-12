@@ -7,17 +7,18 @@ use errors::*;
 use std::fs::File;
 use std::io::BufReader;
 use csv;
+use std::collections::HashMap;
 
 type SpawnItem = Rc<Box<Spawn>>;
 
 pub struct SpawnList(Vec<SpawnItem>);
-pub struct ClaimList(Vec<SpawnClaim>);
+pub struct ClaimList(HashMap<String, SpawnClaim>);
 
 #[derive(Debug, Deserialize)]
 pub struct Spawn {
-  name: String,
-  code: String,
-  category: String,
+  pub name: String,
+  pub code: String,
+  pub category: String,
 }
 
 pub struct SpawnClaim {
@@ -59,9 +60,19 @@ impl SpawnList {
   }
 }
 
+pub enum ClaimResult {
+  NewClaim(SpawnItem),
+  ClaimedBefore(SpawnItem),
+  UnknownSpawn
+}
+
 impl ClaimList {
   pub fn new() -> Self {
-    ClaimList(Vec::new())
+    ClaimList(HashMap::new())
+  }
+
+  pub fn claim_by_code(&self, code: &str) -> Option<&SpawnClaim> {
+    self.0.get(code) 
   }
 
   pub fn claim(
@@ -69,17 +80,20 @@ impl ClaimList {
     spawn_list: &SpawnList,
     spawn_msg: &str,
     message: Message,
-  ) -> Option<&SpawnClaim> {
+  ) -> ClaimResult {
     match spawn_list.find_from_msg(spawn_msg) {
       Some(spawn) => {
-        self.0.push(SpawnClaim {
-          message,
-          spawn: spawn.clone(),
-        });
-
-        Some(self.0.iter().last().unwrap())
-      }
-      None => None,
+        let message_id = message.id.clone();
+        let entry = self.0.entry(spawn.code.clone()).or_insert(SpawnClaim { message, spawn: spawn.clone() });
+        
+        if entry.message.id == message_id {
+          ClaimResult::NewClaim(spawn.clone())
+        }
+        else {
+          ClaimResult::ClaimedBefore(spawn.clone())
+        }
+      },
+      None => ClaimResult::UnknownSpawn
     }
   }
 }
