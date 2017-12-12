@@ -71,9 +71,7 @@ pub fn run(bot_key: &str) -> Result<()> {
 
     let (sender, receiver) = channel();
 
-    thread::spawn(move || {
-        event_loop(connection, shared_state.clone(), sender.clone())
-    });
+    thread::spawn(move || event_loop(connection, shared_state.clone(), sender.clone()));
 
     loop {
         let command = receiver.recv().unwrap();
@@ -87,7 +85,7 @@ pub fn run(bot_key: &str) -> Result<()> {
                 let interaction_channel_id = message.channel_id.clone();
                 let info_channel_id = channel_pairs.get(&message.channel_id).unwrap();
 
-                match spawn_claims.claim(&spawns, &spawn_msg, message) {
+                match spawn_claims.claim(&spawns, &spawn_msg, message.clone()) {
                     ClaimResult::NewClaim(spawn) => {
                         let claimed_spawn = spawn_claims.claim_by_code(&spawn.code).unwrap();
 
@@ -97,7 +95,7 @@ pub fn run(bot_key: &str) -> Result<()> {
                             })
                             .chain_err(|| "Failed to send message")?;
                     }
-                    ClaimResult::UnknownSpawn => {                        
+                    ClaimResult::UnknownSpawn => {
                         shared_discord
                             .send_message(
                                 interaction_channel_id,
@@ -110,7 +108,28 @@ pub fn run(bot_key: &str) -> Result<()> {
                     ClaimResult::ClaimedBefore(spawn) => {
                         let claimed_spawn = spawn_claims.claim_by_code(&spawn.code).unwrap();
 
-                        shared_discord.send_message(interaction_channel_id, &format!("Sorry, but <@{}> claimed this spawn already. Maybe you should message him?", claimed_spawn.user().id), "", false).chain_err(|| "Failed to send message")?;
+                        if claimed_spawn.user().id == message.author.id {
+                            shared_discord
+                                .send_message(
+                                    interaction_channel_id,
+                                    "You've already claimed this spawn.",
+                                    "",
+                                    false,
+                                )
+                                .chain_err(|| "Failed to send message.")?;
+                        } else {
+                            shared_discord
+                                .send_message(
+                                    interaction_channel_id,
+                                    &format!(
+                                        "Sorry, but <@{}> claimed this spawn already. Maybe you should message him?",
+                                        claimed_spawn.user().id
+                                    ), 
+                                    "",
+                                    false
+                                )
+                                .chain_err(|| "Failed to send message")?;
+                        }
                     }
                 }
             }
